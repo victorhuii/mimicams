@@ -24,7 +24,8 @@ export function findGrip(hands:Point[][],handedness:{categoryName:string}[][]=[]
 export function cigaretteAngle(grip:Grip){
  // Constrain the final drawing for EVERY grip, including a thumb-pinch
  // fallback. Finger direction must never rotate this prop upright.
- const outward=grip.hand==='Left'?1:grip.hand==='Right'?-1:Math.sign(grip.dx)||1;
+ const handDirection=grip.hand==='Left'?1:grip.hand==='Right'?-1:Math.sign(grip.dx)||1;
+ const outward=handDirection*(grip.kind==='thumb-pinch'?-1:1);
  return outward>0?-Math.PI/18:-Math.PI+Math.PI/18;
 }
 export class EdgeMotion{

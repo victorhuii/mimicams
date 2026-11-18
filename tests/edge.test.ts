@@ -47,7 +47,8 @@ describe('edge camera interaction',()=>{
    const angle=cigaretteAngle({...grip,hand,kind,dx:0,dy:-.3});
    const previewX=-Math.cos(angle),previewY=Math.sin(angle);
    expect(Math.abs(previewY/previewX)).toBeCloseTo(Math.tan(Math.PI/18));
-   expect(previewY).toBeLessThan(0);expect(Math.sign(previewX)).toBe(hand==='Left'?-1:1);
+   const handDirection=hand==='Left'?-1:1;
+   expect(previewY).toBeLessThan(0);expect(Math.sign(previewX)).toBe(handDirection*(kind==='thumb-pinch'?-1:1));
   }
  });
  it('recognizes slightly separated upright index/middle fingers without a thumb pinch',()=>{
