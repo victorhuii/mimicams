@@ -1,6 +1,6 @@
 export type Point={x:number;y:number};
 export type Grip={x:number;y:number;dx:number;dy:number;scale:number;hand:'Left'|'Right'|'Unknown';kind:'two-fingers'|'thumb-pinch'};
-export type EdgeCue='pinch'|'hold'|'inhale'|'away'|'ready'|'exhale';
+export type EdgeCue='pinch'|'hold'|'inhale'|'away'|'ready'|'exhale'|'out';
 const distance=(a:Point,b:Point)=>Math.hypot(a.x-b.x,a.y-b.y);
 // Normalize thresholds to the palm/face so the gestures work at different distances.
 export function findGrip(hands:Point[][],handedness:{categoryName:string}[][]=[]):Grip|null{
@@ -28,24 +28,43 @@ export function cigaretteAngle(grip:Grip){
  return outward>0?-Math.PI/18:-Math.PI+Math.PI/18;
 }
 export class EdgeMotion{
- private heldAt:number|null=null;private chargedAt:number|null=null;private lastPuff=-Infinity;private lastTime=0;private exhaleUntil=0;
- update(grip:Grip|null,face:Point[]|undefined,now:number){
+ private heldAt:number|null=null;private chargedAt:number|null=null;private lastPuff=-Infinity;private lastTime=0;private exhaleUntil=0;private inhaleLatched=false;
+ update(grip:Grip|null,face:Point[]|undefined,now:number,canInhale=true){
   if(now-this.lastTime>300){this.heldAt=null;this.chargedAt=null;this.exhaleUntil=0;}this.lastTime=now;
   const mouth=face?.[13]&&face?.[14]?{x:(face[13].x+face[14].x)/2,y:(face[13].y+face[14].y)/2}:null;
   const width=face?.[61]&&face?.[291]?distance(face[61],face[291]):0;
   const open=!!face&&width>.015&&distance(face[13],face[14])/width>.11;
   const near=!!grip&&!!mouth&&width>.015&&distance(grip,mouth)<width*.95;
-  let puff=false,cue:EdgeCue='pinch';
+  if(!near)this.inhaleLatched=false;
+  let puff=false,inhaled=false,cue:EdgeCue='pinch';
   if(!mouth){this.heldAt=null;this.chargedAt=null;this.exhaleUntil=0;}
-  else if(now<this.exhaleUntil){cue=near?'away':'exhale';if(!open||near)this.exhaleUntil=0;}
+  else if(now<this.exhaleUntil){cue=near||!open?'hold':'exhale';if(!open||near)this.exhaleUntil=0;}
   else if(this.chargedAt!==null){
    cue=near?'away':'ready';if(now-this.chargedAt>6500)this.chargedAt=null;
    else if(!near&&open&&now-this.lastPuff>1500){puff=true;cue='exhale';this.lastPuff=now;this.exhaleUntil=now+2400;this.chargedAt=null;this.heldAt=null;}
-  }else if(near&&!open){
-   this.heldAt??=now;cue='inhale';if(now-this.heldAt>=900){this.chargedAt=now;cue='ready';}
+  }else if(near&&!open&&canInhale&&!this.inhaleLatched){
+   this.heldAt??=now;cue='inhale';if(now-this.heldAt>=900){this.chargedAt=now;cue='ready';inhaled=true;this.inhaleLatched=true;}
   }else{this.heldAt=null;cue=grip?'hold':'pinch';}
   if(!near&&now<this.exhaleUntil)cue='exhale';
-  return {mouth,near,open,puff,cue,exhaling:!!mouth&&!near&&open&&now<this.exhaleUntil};
+  return {mouth,near,open,puff,inhaled,cue,exhaling:!!mouth&&!near&&open&&now<this.exhaleUntil};
+ }
+}
+export class CigaretteLife{
+ private draws=0;private from=1;private target=1;private changed=0;private finishedAt:number|null=null;private released=false;
+ private remaining(now:number){const t=Math.min(1,Math.max(0,(now-this.changed)/450));return this.from+(this.target-this.from)*(1-Math.pow(1-t,3));}
+ inhale(now:number){
+  if(this.finishedAt!==null)return;
+  this.from=this.remaining(now);this.target=Math.max(0,1-(++this.draws)/6);this.changed=now;
+  if(this.draws===6)this.finishedAt=now+450;
+ }
+ update(now:number,holding:boolean){
+  let fresh=false;
+  if(this.finishedAt!==null&&now>=this.finishedAt+1400){
+   if(!holding)this.released=true;
+   else if(this.released){this.draws=0;this.from=1;this.target=1;this.finishedAt=null;this.released=false;fresh=true;}
+  }
+  const snuff=this.finishedAt===null?-1:Math.max(0,Math.min(1,(now-this.finishedAt)/1400));
+  return {remaining:this.remaining(now),snuff,finished:this.finishedAt!==null,fresh};
  }
 }
 export function smokeDirection(matrix:ArrayLike<number>|undefined){

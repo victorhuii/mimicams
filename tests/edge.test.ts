@@ -1,13 +1,31 @@
 import {describe,it,expect} from 'vitest';
-import {EdgeMotion,findGrip,cigaretteAngle,smokeDirection,type Point,type Grip} from '../src/vision/edge';
+import {EdgeMotion,CigaretteLife,findGrip,cigaretteAngle,smokeDirection,type Point,type Grip} from '../src/vision/edge';
 const face=(open=false)=>{const f=Array.from({length:478},()=>({x:.5,y:.5}));f[61]={x:.4,y:.5};f[291]={x:.6,y:.5};f[13]={x:.5,y:.5};f[14]={x:.5,y:open?.54:.505};return f;};
 const grip:Grip={x:.5,y:.53,dx:.05,dy:0,scale:.15,hand:'Left',kind:'two-fingers'};
 describe('edge camera interaction',()=>{
+ it('counts one completed inhale per hold, even if the hand stays at the lips',()=>{
+  const m=new EdgeMotion();let draws=0;for(let t=0;t<18000;t+=100)if(m.update(grip,face(),t).inhaled)draws++;
+  expect(draws).toBe(1);m.update({...grip,x:.1},face(),18000);
+  for(let t=18100;t<=19100;t+=100)if(m.update(grip,face(),t).inhaled)draws++;expect(draws).toBe(2);
+ });
+ it('burns only the paper over six inhales, snuffs out, then requires releasing the grip for a fresh cigarette',()=>{
+  const life=new CigaretteLife();expect(life.update(0,true).remaining).toBe(1);
+  for(let draw=1;draw<=6;draw++){const now=draw*1000;life.inhale(now);expect(life.update(now+450,true).remaining).toBeCloseTo(1-draw/6);}
+  expect(life.update(6450,true)).toMatchObject({remaining:0,finished:true,snuff:0});
+  expect(life.update(7150,true).snuff).toBeCloseTo(.5);expect(life.update(8000,true).snuff).toBe(1);
+  life.inhale(8100);expect(life.update(8200,true).remaining).toBe(0);
+  life.update(8300,false);expect(life.update(8400,true)).toMatchObject({remaining:1,finished:false,fresh:true});
+ });
+ it('cannot inhale again after burnout, but can still exhale the last draw',()=>{
+  const m=new EdgeMotion();for(let t=0;t<=1000;t+=100)m.update(grip,face(),t);
+  expect(m.update({...grip,x:.1},face(true),1100,false).puff).toBe(true);
+  for(let t=1200;t<6000;t+=100)expect(m.update(grip,face(),t,false).inhaled).toBe(false);
+ });
  it('blocks smoke at the lips, permits it after moving away, and stops it if the cigarette returns',()=>{
   const m=new EdgeMotion();for(let t=0;t<=1000;t+=100)m.update(grip,face(),t);
   const blocked=m.update(grip,face(true),1100);expect(blocked.puff).toBe(false);expect(blocked.exhaling).toBe(false);expect(blocked.cue).toBe('away');
   const away={...grip,x:.15};expect(m.update(away,face(true),1200).exhaling).toBe(true);
-  expect(m.update(grip,face(true),1300).exhaling).toBe(false);expect(m.update(away,face(true),1400).exhaling).toBe(false);
+  const stopped=m.update(grip,face(true),1300);expect(stopped.exhaling).toBe(false);expect(stopped.cue).not.toBe('away');expect(m.update(away,face(true),1400).exhaling).toBe(false);
  });
  it('requires a hold at the lips before releasing one puff',()=>{const m=new EdgeMotion();expect(m.update(null,face(true),0).puff).toBe(false);for(let t=100;t<=1100;t+=100)m.update(grip,face(),t);expect(m.update(null,face(true),1200).puff).toBe(true);expect(m.update(null,face(true),1300).puff).toBe(false);});
  it('does not arm far from the mouth or with an open mouth',()=>{for(const open of [false,true]){const m=new EdgeMotion();for(let t=0;t<=1500;t+=100)m.update(open?grip:{...grip,x:.1},face(open),t);expect(m.update(null,face(true),1600).puff).toBe(false);}});
