@@ -1,9 +1,9 @@
 import {useEffect,useRef,useState} from 'react';
 import {models} from './vision/mediapipe';
-import {EdgeMotion,findGrip,type Grip,type EdgeCue} from './vision/edge';
+import {EdgeMotion,findGrip,smokeDirection,type Grip,type EdgeCue} from './vision/edge';
 
 const instructions:Record<EdgeCue,string>={pinch:'Pinch two fingers to pick one up',hold:'Bring your fingers to your lips',inhale:'Hold there for a moment…',ready:'Open your mouth a little to exhale',exhale:'And let it drift away.'};
-type Puff={x:number;y:number;vx:number;vy:number;born:number;life:number;size:number;wave:number};
+type Puff={x:number;y:number;vx:number;vy:number;born:number;life:number;size:number;wave:number;front:number};
 function cigarette(ctx:CanvasRenderingContext2D,g:Grip,w:number,h:number,glow:boolean){
  const length=Math.max(36,Math.min(w*.18,g.scale*w*.95)),thick=length*.15;
  ctx.save();ctx.translate(g.x*w,g.y*h);ctx.rotate(Math.atan2(g.dy*h,g.dx*w));
@@ -26,18 +26,22 @@ export default function EdgeCam(){
    const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:960},height:{ideal:720}},audio:false});
    if(token!==generation.current){s.getTracks().forEach(t=>t.stop());return;}stream.current=s;
    const v=video.current!;v.srcObject=s;await v.play();const [hands,face]=await models();if(token!==generation.current)return;
-   setStatus('ready');const motion=new EdgeMotion();let grip:Grip|null=null,lastGrip=0,lastVideo=-1,lastCue:EdgeCue='pinch',lastFrame=performance.now();let particles:Puff[]=[];
+   setStatus('ready');const motion=new EdgeMotion();let grip:Grip|null=null,lastGrip=0,lastVideo=-1,lastCue:EdgeCue='pinch',lastFrame=performance.now(),lastTracked=0,emission=0;let particles:Puff[]=[];
+   let mouth:{x:number;y:number}|null=null,exhaling=false,direction={x:0,y:0,front:1};
    const tick=(now:number)=>{try{
     if(token!==generation.current)return;const c=canvas.current;if(!c)return;const w=v.videoWidth,h=v.videoHeight;if(c.width!==w||c.height!==h){c.width=w;c.height=h;}const ctx=c.getContext('2d')!;ctx.clearRect(0,0,w,h);
     if(v.readyState>=2&&v.currentTime!==lastVideo){
-     lastVideo=v.currentTime;const handResult=hands.recognizeForVideo(v,now),faceResult=face.detectForVideo(v,now),found=findGrip(handResult.landmarks);
-     if(found){const blend=grip?.35:1;grip=grip?{x:grip.x+(found.x-grip.x)*blend,y:grip.y+(found.y-grip.y)*blend,dx:grip.dx+(found.dx-grip.dx)*blend,dy:grip.dy+(found.dy-grip.dy)*blend,scale:found.scale}:found;lastGrip=now;}else if(now-lastGrip>180)grip=null;
+     lastVideo=v.currentTime;const handResult=hands.recognizeForVideo(v,now),faceResult=face.detectForVideo(v,now),found=findGrip(handResult.landmarks,handResult.handedness);
+     if(found){const previous=grip,blend=.45;grip=previous&&previous.hand===found.hand&&previous.kind===found.kind?{...found,x:previous.x+(found.x-previous.x)*blend,y:previous.y+(found.y-previous.y)*blend,dx:previous.dx+(found.dx-previous.dx)*blend,dy:previous.dy+(found.dy-previous.dy)*blend}:found;lastGrip=now;}else if(now-lastGrip>180)grip=null;
      const state=motion.update(found,faceResult.faceLandmarks[0],now);
      if(state.cue!==lastCue){lastCue=state.cue;setCue(state.cue);}
-     if(state.puff&&state.mouth){for(let i=0;i<42;i++)particles.push({x:state.mouth.x*w,y:state.mouth.y*h,vx:(Math.random()-.5)*w*.12,vy:-h*(.025+Math.random()*.04),born:now+i*12,life:1800+Math.random()*1400,size:w*(.006+Math.random()*.008),wave:Math.random()*6});}
+     mouth=state.mouth;exhaling=state.exhaling;lastTracked=now;direction=smokeDirection(faceResult.facialTransformationMatrixes?.[0]?.data);
     }
     const dt=Math.min((now-lastFrame)/1000,.05);lastFrame=now;particles=particles.filter(p=>now-p.born<p.life);
-    for(const p of particles){const age=(now-p.born)/p.life;if(age<0)continue;p.x+=p.vx*dt;p.y+=p.vy*dt;const r=p.size*(1+age*4);ctx.globalAlpha=Math.sin(Math.PI*age)*.32;ctx.fillStyle='#f8f2ed';ctx.beginPath();ctx.ellipse(p.x+Math.sin(age*6+p.wave)*w*.012,p.y,r,r*.8,age,0,Math.PI*2);ctx.fill();}ctx.globalAlpha=1;
+    // Emit at the latest lip position throughout the exhale. Older smoke drifts
+    // freely, leaving a trail as the mouth moves rather than dragging the cloud.
+    if(exhaling&&mouth&&now-lastTracked<180){emission+=dt*65;while(emission>=1){emission--;particles.push({x:mouth.x*w,y:mouth.y*h,vx:direction.x*w*.30+(Math.random()-.5)*w*.025,vy:direction.y*h*.24-h*.018+(Math.random()-.5)*h*.02,born:now,life:1500+Math.random()*1100,size:w*(.006+Math.random()*.009),wave:Math.random()*6,front:direction.front});}}else emission=0;
+    for(const p of particles){const age=(now-p.born)/p.life;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy-=h*.014*dt;const r=p.size*(1+age*(3+p.front*11));ctx.globalAlpha=Math.sin(Math.PI*age)*(.16+p.front*.04);ctx.fillStyle='#f8f2ed';ctx.beginPath();ctx.ellipse(p.x+Math.sin(age*6+p.wave)*w*.009,p.y,r,r*(.72+p.front*.28),0,0,Math.PI*2);ctx.fill();}ctx.globalAlpha=1;
     if(grip)cigarette(ctx,grip,w,h,lastCue==='inhale'||lastCue==='ready');
     raf.current=requestAnimationFrame(tick);
    }catch(e){if(token!==generation.current)return;stop();setError(`Tracking stopped. ${(e as Error).message}`);setStatus('error');}};raf.current=requestAnimationFrame(tick);
