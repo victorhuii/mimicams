@@ -6,9 +6,9 @@ const instructions:Record<EdgeCue,string>={pinch:'Pinch two fingers to pick one 
 type Puff={x:number;y:number;vx:number;vy:number;born:number;life:number;size:number;wave:number;front:number};
 type PropKind='cigarette'|'joint';
 function PropIcon({kind}:{kind:PropKind}){return <svg viewBox="0 0 120 48" aria-hidden="true"><g transform="translate(12 30) rotate(-10)" stroke="#483b48" strokeWidth="2.5" strokeLinejoin="round">{kind==='joint'?<><path d="M0-4 80-9 87-4 87 4 80 9 0 4Z" fill="#e9dcba"/><path d="M0-4 18-5 18 5 0 4Z" fill="#c4a77b"/><path d="m25-2 46-3M35 3l37 2" stroke="#b7a17e" strokeWidth="1"/><path d="M80-9 87-4 87 4 80 9" fill="#a89a8a"/></>:<><rect x="0" y="-7" width="88" height="14" rx="3" fill="#fff5df"/><rect x="0" y="-7" width="24" height="14" rx="2" fill="#dfae7e"/><path d="M83-6v12" stroke="#b3a7a2" strokeWidth="6"/></>}</g></svg>;}
-function cigarette(ctx:CanvasRenderingContext2D,g:Grip,w:number,h:number,glow:boolean,remaining:number,snuff:number,kind:PropKind){
+function cigarette(ctx:CanvasRenderingContext2D,g:Grip,w:number,h:number,glow:boolean,remaining:number,snuff:number,kind:PropKind,faceX?:number){
  const length=Math.max(36,Math.min(w*.18,g.scale*w*.95)),thick=length*.15;
- ctx.save();ctx.translate(g.x*w,g.y*h);ctx.rotate(cigaretteAngle(g));
+ ctx.save();ctx.translate(g.x*w,g.y*h);ctx.rotate(cigaretteAngle(g,faceX));
  const extinguishing=snuff>=0,progress=Math.max(0,snuff);
  if(extinguishing){ctx.translate(length*.035*Math.sin(progress*Math.PI*5)*(1-progress),thick*.25*Math.sin(progress*Math.PI));ctx.scale(1,1-.28*Math.sin(progress*Math.PI));ctx.globalAlpha=1-Math.max(0,(progress-.65)/.35);}
  const filterStart=-length*.24,filterLength=length*.28,paperStart=filterStart+filterLength,paperLength=length*.72*remaining,tip=paperStart+paperLength;
@@ -38,7 +38,7 @@ export default function EdgeCam(){
    if(token!==generation.current){s.getTracks().forEach(t=>t.stop());return;}stream.current=s;
    const v=video.current!;v.srcObject=s;await v.play();const [hands,face]=await models();if(token!==generation.current)return;
    setStatus('ready');let motion=new EdgeMotion(),life=new CigaretteLife(),activeProp=propRef.current;let grip:Grip|null=null,lastGrip=0,lastVideo=-1,lastCue:EdgeCue='pinch',motionCue:EdgeCue='pinch',lastFrame=performance.now(),lastTracked=0,emission=0;let particles:Puff[]=[];
-   let mouth:{x:number;y:number}|null=null,exhaling=false,burnedOut=false,direction={x:0,y:0,front:1};
+   let mouth:{x:number;y:number}|null=null,faceX:number|undefined,exhaling=false,burnedOut=false,direction={x:0,y:0,front:1};
    const tick=(now:number)=>{try{
     if(token!==generation.current)return;const c=canvas.current;if(!c)return;const w=v.videoWidth,h=v.videoHeight;if(c.width!==w||c.height!==h){c.width=w;c.height=h;}const ctx=c.getContext('2d')!;ctx.clearRect(0,0,w,h);
     if(activeProp!==propRef.current){activeProp=propRef.current;motion=new EdgeMotion();life=new CigaretteLife();motionCue='pinch';burnedOut=false;exhaling=false;emission=0;particles=[];}
@@ -46,6 +46,8 @@ export default function EdgeCam(){
      lastVideo=v.currentTime;const handResult=hands.recognizeForVideo(v,now),faceResult=face.detectForVideo(v,now),found=findGrip(handResult.landmarks,handResult.handedness);
      if(found){const previous=grip,blend=.45;grip=previous&&previous.hand===found.hand&&previous.kind===found.kind?{...found,x:previous.x+(found.x-previous.x)*blend,y:previous.y+(found.y-previous.y)*blend,dx:previous.dx+(found.dx-previous.dx)*blend,dy:previous.dy+(found.dy-previous.dy)*blend}:found;lastGrip=now;}else if(now-lastGrip>180)grip=null;
      const state=motion.update(grip,faceResult.faceLandmarks[0],now,!burnedOut);
+     const facePoints=faceResult.faceLandmarks[0];
+     faceX=facePoints?.[234]&&facePoints?.[454]?(facePoints[234].x+facePoints[454].x)/2:state.mouth?.x;
      if(state.inhaled)life.inhale(now);motionCue=state.cue;
      mouth=state.mouth;exhaling=state.exhaling;lastTracked=now;direction=smokeDirection(faceResult.facialTransformationMatrixes?.[0]?.data);
     }
@@ -58,7 +60,7 @@ export default function EdgeCam(){
     burnedOut=cigaretteState.finished;
     if(cigaretteState.fresh){motion=new EdgeMotion();motionCue='hold';exhaling=false;}
     const nextCue=cigaretteState.finished?'out':motionCue;if(nextCue!==lastCue){lastCue=nextCue;setCue(nextCue);}
-    if(grip)cigarette(ctx,grip,w,h,motionCue==='inhale'||motionCue==='ready',cigaretteState.remaining,cigaretteState.finished?cigaretteState.snuff:-1,activeProp);
+    if(grip)cigarette(ctx,grip,w,h,motionCue==='inhale'||motionCue==='ready',cigaretteState.remaining,cigaretteState.finished?cigaretteState.snuff:-1,activeProp,faceX);
     raf.current=requestAnimationFrame(tick);
    }catch(e){if(token!==generation.current)return;stop();setError(`Tracking stopped. ${(e as Error).message}`);setStatus('error');}};raf.current=requestAnimationFrame(tick);
   }catch(e){if(token!==generation.current)return;stream.current?.getTracks().forEach(t=>t.stop());stream.current=null;setStatus('error');setError((e as Error).name==='NotAllowedError'?'Allow camera access in your browser, then try again.':(e as Error).message);}

@@ -3,6 +3,16 @@ import {EdgeMotion,CigaretteLife,findGrip,cigaretteAngle,smokeDirection,type Poi
 const face=(open=false)=>{const f=Array.from({length:478},()=>({x:.5,y:.5}));f[61]={x:.4,y:.5};f[291]={x:.6,y:.5};f[13]={x:.5,y:.5};f[14]={x:.5,y:open?.54:.505};return f;};
 const grip:Grip={x:.5,y:.53,dx:.05,dy:0,scale:.15,hand:'Left',kind:'two-fingers'};
 describe('edge camera interaction',()=>{
+ it('points the index/middle grip away from the face in the mirrored preview regardless of hand',()=>{
+  for(const hand of ['Left','Right'] as const){
+   expect(-Math.cos(cigaretteAngle({...grip,hand,x:.7},.5))).toBeLessThan(0);
+   expect(-Math.cos(cigaretteAngle({...grip,hand,x:.3},.5))).toBeGreaterThan(0);
+   // Moving the face across the same hand flips the direction too.
+   expect(-Math.cos(cigaretteAngle({...grip,hand,x:.7},.8))).toBeGreaterThan(0);
+   const pinch={...grip,hand,kind:'thumb-pinch' as const};
+   expect(cigaretteAngle(pinch,.2)).toBe(cigaretteAngle(pinch,.8));
+  }
+ });
  it('counts one completed inhale per hold, even if the hand stays at the lips',()=>{
   const m=new EdgeMotion();let draws=0;for(let t=0;t<18000;t+=100)if(m.update(grip,face(),t).inhaled)draws++;
   expect(draws).toBe(1);m.update({...grip,x:.1},face(),18000);

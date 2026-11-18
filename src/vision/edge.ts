@@ -21,11 +21,13 @@ export function findGrip(hands:Point[][],handedness:{categoryName:string}[][]=[]
   return {x,y,dx:twoFingers?outward*scale:x-base.x,dy:twoFingers?0:y-base.y,scale,hand:label==='Left'||label==='Right'?label:'Unknown',kind:twoFingers?'two-fingers':'thumb-pinch'};
  }return null;
 }
-export function cigaretteAngle(grip:Grip){
+export function cigaretteAngle(grip:Grip,faceX?:number){
  // Constrain the final drawing for EVERY grip, including a thumb-pinch
  // fallback. Finger direction must never rotate this prop upright.
  const handDirection=grip.hand==='Left'?1:grip.hand==='Right'?-1:Math.sign(grip.dx)||1;
- const outward=handDirection*(grip.kind==='thumb-pinch'?-1:1);
+ // Camera coordinates are mirrored in the preview: a hand to the right of
+ // the face in camera space is on the preview's left and points camera-right.
+ const outward=grip.kind==='two-fingers'&&faceX!==undefined?grip.x>=faceX?1:-1:handDirection*(grip.kind==='thumb-pinch'?-1:1);
  return outward>0?-Math.PI/18:-Math.PI+Math.PI/18;
 }
 export class EdgeMotion{
