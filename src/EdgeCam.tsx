@@ -1,12 +1,12 @@
 import {useEffect,useRef,useState} from 'react';
 import {models} from './vision/mediapipe';
-import {EdgeMotion,findGrip,smokeDirection,type Grip,type EdgeCue} from './vision/edge';
+import {EdgeMotion,findGrip,cigaretteAngle,smokeDirection,type Grip,type EdgeCue} from './vision/edge';
 
 const instructions:Record<EdgeCue,string>={pinch:'Pinch two fingers to pick one up',hold:'Bring your fingers to your lips',inhale:'Hold there for a moment…',away:'Move the cigarette away from your lips',ready:'Open your mouth a little to exhale',exhale:'And let it drift away.'};
 type Puff={x:number;y:number;vx:number;vy:number;born:number;life:number;size:number;wave:number;front:number};
 function cigarette(ctx:CanvasRenderingContext2D,g:Grip,w:number,h:number,glow:boolean){
  const length=Math.max(36,Math.min(w*.18,g.scale*w*.95)),thick=length*.15;
- ctx.save();ctx.translate(g.x*w,g.y*h);ctx.rotate(Math.atan2(g.dy*h,g.dx*w));
+ ctx.save();ctx.translate(g.x*w,g.y*h);ctx.rotate(cigaretteAngle(g));
  ctx.lineJoin='round';ctx.lineWidth=Math.max(2,length*.025);ctx.strokeStyle='#483b48';
  ctx.fillStyle='#fff5df';ctx.beginPath();ctx.roundRect(-length*.24,-thick/2,length,thick,thick*.28);ctx.fill();ctx.stroke();
  ctx.fillStyle='#dfae7e';ctx.beginPath();ctx.roundRect(-length*.24,-thick/2,length*.28,thick,thick*.2);ctx.fill();ctx.stroke();

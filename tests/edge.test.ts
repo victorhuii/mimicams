@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {EdgeMotion,findGrip,smokeDirection,type Point,type Grip} from '../src/vision/edge';
+import {EdgeMotion,findGrip,cigaretteAngle,smokeDirection,type Point,type Grip} from '../src/vision/edge';
 const face=(open=false)=>{const f=Array.from({length:478},()=>({x:.5,y:.5}));f[61]={x:.4,y:.5};f[291]={x:.6,y:.5};f[13]={x:.5,y:.5};f[14]={x:.5,y:open?.54:.505};return f;};
 const grip:Grip={x:.5,y:.53,dx:.05,dy:0,scale:.15,hand:'Left',kind:'two-fingers'};
 describe('edge camera interaction',()=>{
@@ -21,8 +21,20 @@ describe('edge camera interaction',()=>{
    const found=findGrip([h],[[{categoryName:hand}]])!;expect(found.hand).toBe(hand);expect(found.kind).toBe('two-fingers');
    expect(found.x).toBeCloseTo((h[8].x+h[12].x)/2);expect(found.y).toBeCloseTo((h[8].y+h[12].y)/2);
    expect(found.dy).toBe(0);expect(Math.abs(found.dx)).toBeGreaterThan(0);
-   const side=h[5].x-h[9].x;if(Math.abs(side)>.01)expect(Math.sign(found.dx)).toBe(Math.sign(side));
+   expect(Math.sign(found.dx)).toBe(hand==='Left'?1:-1);
   }
+ });
+ it('keeps even a vertical thumb-pinch fallback ten degrees from horizontal in the mirrored preview',()=>{
+  for(const hand of ['Left','Right'] as const)for(const kind of ['two-fingers','thumb-pinch'] as const){
+   const angle=cigaretteAngle({...grip,hand,kind,dx:0,dy:-.3});
+   const previewX=-Math.cos(angle),previewY=Math.sin(angle);
+   expect(Math.abs(previewY/previewX)).toBeCloseTo(Math.tan(Math.PI/18));
+   expect(previewY).toBeLessThan(0);expect(Math.sign(previewX)).toBe(hand==='Left'?-1:1);
+  }
+ });
+ it('recognizes slightly separated upright index/middle fingers without a thumb pinch',()=>{
+  const h=Array.from({length:21},()=>({x:.5,y:.8}));h[0]={x:.5,y:.8};h[5]={x:.45,y:.6};h[9]={x:.55,y:.6};h[8]={x:.43,y:.4};h[12]={x:.57,y:.4};h[4]={x:.5,y:.75};
+  expect(findGrip([h],[[{categoryName:'Left'}]])?.kind).toBe('two-fingers');
  });
  it('continues exhaling from the current moving lips and stops when they close',()=>{
   const m=new EdgeMotion();for(let t=0;t<=1000;t+=100)m.update(grip,face(),t);

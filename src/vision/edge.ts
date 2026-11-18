@@ -6,7 +6,7 @@ const distance=(a:Point,b:Point)=>Math.hypot(a.x-b.x,a.y-b.y);
 export function findGrip(hands:Point[][],handedness:{categoryName:string}[][]=[]):Grip|null{
  for(let i=0;i<hands.length;i++){const h=hands[i];if(h.length<21)continue;const scale=distance(h[0],h[9]);if(scale<.025)continue;
   const thumbPinch=distance(h[4],h[8])<scale*.38;
-  const twoFingers=distance(h[8],h[12])<scale*.55&&distance(h[8],h[5])>scale*.65&&distance(h[12],h[9])>scale*.65;
+  const twoFingers=distance(h[8],h[12])<scale*.95&&distance(h[8],h[5])>scale*.55&&distance(h[12],h[9])>scale*.55;
   if(!thumbPinch&&!twoFingers)continue;
   // Prefer the index/middle grip even if the thumb happens to touch the index.
   // The filter sits in their gap, with the lit end extending horizontally
@@ -15,9 +15,17 @@ export function findGrip(hands:Point[][],handedness:{categoryName:string}[][]=[]
   const base=twoFingers?{x:(h[5].x+h[9].x)/2,y:(h[5].y+h[9].y)/2}:h[6];
   const label=handedness[i]?.[0]?.categoryName;
   const side=h[5].x-h[9].x;
-  const outward=Math.abs(side)>scale*.04?Math.sign(side):label==='Left'?-1:1;
+  // The canvas is mirrored with the selfie video. Positive camera X appears
+  // left in the preview: a left hand points left, a right hand points right.
+  const outward=label==='Left'?1:label==='Right'?-1:Math.abs(side)>scale*.04?Math.sign(side):1;
   return {x,y,dx:twoFingers?outward*scale:x-base.x,dy:twoFingers?0:y-base.y,scale,hand:label==='Left'||label==='Right'?label:'Unknown',kind:twoFingers?'two-fingers':'thumb-pinch'};
  }return null;
+}
+export function cigaretteAngle(grip:Grip){
+ // Constrain the final drawing for EVERY grip, including a thumb-pinch
+ // fallback. Finger direction must never rotate this prop upright.
+ const outward=grip.hand==='Left'?1:grip.hand==='Right'?-1:Math.sign(grip.dx)||1;
+ return outward>0?-Math.PI/18:-Math.PI+Math.PI/18;
 }
 export class EdgeMotion{
  private heldAt:number|null=null;private chargedAt:number|null=null;private lastPuff=-Infinity;private lastTime=0;private exhaleUntil=0;
