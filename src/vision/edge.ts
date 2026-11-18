@@ -9,12 +9,14 @@ export function findGrip(hands:Point[][],handedness:{categoryName:string}[][]=[]
   const twoFingers=distance(h[8],h[12])<scale*.55&&distance(h[8],h[5])>scale*.65&&distance(h[12],h[9])>scale*.65;
   if(!thumbPinch&&!twoFingers)continue;
   // Prefer the index/middle grip even if the thumb happens to touch the index.
-  // The filter sits in their gap; the lit end points from the knuckles out past
-  // the fingertips. Geometry works for either hand, including rotated palms.
+  // The filter sits in their gap, with the lit end extending horizontally
+  // toward the index/thumb edge of the hand rather than along the fingers.
   const a=h[8],b=h[twoFingers?12:4],x=(a.x+b.x)/2,y=(a.y+b.y)/2;
   const base=twoFingers?{x:(h[5].x+h[9].x)/2,y:(h[5].y+h[9].y)/2}:h[6];
   const label=handedness[i]?.[0]?.categoryName;
-  return {x,y,dx:x-base.x,dy:y-base.y,scale,hand:label==='Left'||label==='Right'?label:'Unknown',kind:twoFingers?'two-fingers':'thumb-pinch'};
+  const side=h[5].x-h[9].x;
+  const outward=Math.abs(side)>scale*.04?Math.sign(side):label==='Left'?-1:1;
+  return {x,y,dx:twoFingers?outward*scale:x-base.x,dy:twoFingers?0:y-base.y,scale,hand:label==='Left'||label==='Right'?label:'Unknown',kind:twoFingers?'two-fingers':'thumb-pinch'};
  }return null;
 }
 export class EdgeMotion{

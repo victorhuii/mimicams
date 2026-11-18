@@ -7,14 +7,15 @@ describe('edge camera interaction',()=>{
  it('does not arm far from the mouth or with an open mouth',()=>{for(const open of [false,true]){const m=new EdgeMotion();for(let t=0;t<=1500;t+=100)m.update(open?grip:{...grip,x:.1},face(open),t);expect(m.update(null,face(true),1600).puff).toBe(false);}});
  it('clears a pending inhale after face tracking is lost or a long frame gap',()=>{for(const lost of [true,false]){const m=new EdgeMotion();for(let t=0;t<=1000;t+=100)m.update(grip,face(),t);if(lost)m.update(null,undefined,1100);expect(m.update(null,face(true),lost?1200:2000).puff).toBe(false);}});
  it('detects a thumb–index pinch at different scales',()=>{for(const scale of [.5,1,2]){const h:Point[]=Array.from({length:21},()=>({x:0,y:0}));h[9]={x:0,y:.2*scale};h[4]={x:.2*scale,y:.1*scale};h[8]={x:.22*scale,y:.1*scale};expect(findGrip([h])).not.toBeNull();h[4]={x:0,y:0};h[8]={x:.5,y:.5};expect(findGrip([h])).toBeNull();}});
- it('puts the filter between index and middle fingertips and points away from either palm',()=>{
+ it('puts the filter between index and middle fingertips and points horizontally out of either hand',()=>{
   for(const hand of ['Left','Right'] as const)for(const rotation of [0,Math.PI/2,Math.PI]){
    const mirror=hand==='Left'?1:-1;
    const transform=(x:number,y:number)=>({x:.5+mirror*(x*Math.cos(rotation)-y*Math.sin(rotation)),y:.5+x*Math.sin(rotation)+y*Math.cos(rotation)});
    const h=Array.from({length:21},()=>transform(0,.2));h[0]=transform(0,.2);h[5]=transform(-.025,0);h[9]=transform(.025,0);h[8]=transform(-.025,-.19);h[12]=transform(.025,-.19);h[4]=h[8];
    const found=findGrip([h],[[{categoryName:hand}]])!;expect(found.hand).toBe(hand);expect(found.kind).toBe('two-fingers');
    expect(found.x).toBeCloseTo((h[8].x+h[12].x)/2);expect(found.y).toBeCloseTo((h[8].y+h[12].y)/2);
-   const outward={x:found.x-h[0].x,y:found.y-h[0].y};expect(found.dx*outward.x+found.dy*outward.y).toBeGreaterThan(0);
+   expect(found.dy).toBe(0);expect(Math.abs(found.dx)).toBeGreaterThan(0);
+   const side=h[5].x-h[9].x;if(Math.abs(side)>.01)expect(Math.sign(found.dx)).toBe(Math.sign(side));
   }
  });
  it('continues exhaling from the current moving lips and stops when they close',()=>{
