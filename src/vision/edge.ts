@@ -1,6 +1,6 @@
 export type Point={x:number;y:number};
 export type Grip={x:number;y:number;dx:number;dy:number;scale:number;hand:'Left'|'Right'|'Unknown';kind:'two-fingers'|'thumb-pinch'};
-export type EdgeCue='pinch'|'hold'|'inhale'|'ready'|'exhale';
+export type EdgeCue='pinch'|'hold'|'inhale'|'away'|'ready'|'exhale';
 const distance=(a:Point,b:Point)=>Math.hypot(a.x-b.x,a.y-b.y);
 // Normalize thresholds to the palm/face so the gestures work at different distances.
 export function findGrip(hands:Point[][],handedness:{categoryName:string}[][]=[]):Grip|null{
@@ -29,15 +29,15 @@ export class EdgeMotion{
   const near=!!grip&&!!mouth&&width>.015&&distance(grip,mouth)<width*.95;
   let puff=false,cue:EdgeCue='pinch';
   if(!mouth){this.heldAt=null;this.chargedAt=null;this.exhaleUntil=0;}
-  else if(now<this.exhaleUntil){cue='exhale';if(!open)this.exhaleUntil=0;}
+  else if(now<this.exhaleUntil){cue=near?'away':'exhale';if(!open||near)this.exhaleUntil=0;}
   else if(this.chargedAt!==null){
-   cue='ready';if(now-this.chargedAt>6500)this.chargedAt=null;
-   else if(open&&now-this.lastPuff>1500){puff=true;cue='exhale';this.lastPuff=now;this.exhaleUntil=now+2400;this.chargedAt=null;this.heldAt=null;}
+   cue=near?'away':'ready';if(now-this.chargedAt>6500)this.chargedAt=null;
+   else if(!near&&open&&now-this.lastPuff>1500){puff=true;cue='exhale';this.lastPuff=now;this.exhaleUntil=now+2400;this.chargedAt=null;this.heldAt=null;}
   }else if(near&&!open){
    this.heldAt??=now;cue='inhale';if(now-this.heldAt>=900){this.chargedAt=now;cue='ready';}
   }else{this.heldAt=null;cue=grip?'hold':'pinch';}
-  if(now-this.lastPuff<1100)cue='exhale';
-  return {mouth,near,open,puff,cue,exhaling:!!mouth&&open&&now<this.exhaleUntil};
+  if(!near&&now<this.exhaleUntil)cue='exhale';
+  return {mouth,near,open,puff,cue,exhaling:!!mouth&&!near&&open&&now<this.exhaleUntil};
  }
 }
 export function smokeDirection(matrix:ArrayLike<number>|undefined){
